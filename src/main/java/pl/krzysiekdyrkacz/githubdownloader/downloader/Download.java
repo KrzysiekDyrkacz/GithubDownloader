@@ -22,13 +22,13 @@ public class Download {
 
     RestTemplate restTemplate = new RestTemplate();
     List<Map> responses = restTemplate.getForObject(
-            "https://api.github.com/repos/{owner}/{repo}/contents?ref={branch}", List.class, "KrzysiekDyrkacz",
-            "GithubDownloader", "main");
+            "https://api.github.com/repos/{owner}/{repo}/contents", List.class, "KrzysiekDyrkacz",
+            "GithubDownloader");
 
 
 
-    @EventListener(ApplicationReadyEvent.class)
 
+    @Scheduled(fixedDelay = 5000)
     public void start() throws IOException {
 
 
@@ -37,23 +37,36 @@ public class Download {
         for (Map fileMetaData : responses) {
             System.out.println(responses + "\\/n");
 
+            if(fileMetaData.get("type").equals("file")){
+                String fileName = (String) fileMetaData.get("name");
+                String downloadUrl = (String) fileMetaData.get("download_url");
 
-            String fileName = (String) fileMetaData.get("name");
-            String downloadUrl = (String) fileMetaData.get("download_url");
+                if (downloadUrl != null) {
 
-            if (downloadUrl != null) {
+                    File file = new File("source/" + fileName);
+                    try {
+                        FileUtils.copyURLToFile(new URL(downloadUrl), file);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
 
-                File file = new File("source/" + fileName);
-                try {
-                    FileUtils.copyURLToFile(new URL(downloadUrl), file);
-                } catch (IOException e) {
-                    e.printStackTrace();
+                }
+
+
+            }else if (fileMetaData.get("type").equals("dir")){
+                String dirName = (String) fileMetaData.get("name");
+                if(!Files.exists(Path.of("source/" + dirName))){
+                    Files.createDirectory(Path.of("source/" + dirName));
                 }
 
             }
+
         }
 
-        Files.createFile(Path.of("source/successFlag.txt"));
+        if(!Files.exists(Path.of("source/successFlag.txt"))){
+            Files.createFile(Path.of("source/successFlag.txt"));
+        }
+
     }
 
 

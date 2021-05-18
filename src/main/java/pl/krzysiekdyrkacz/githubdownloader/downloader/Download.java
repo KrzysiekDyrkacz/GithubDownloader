@@ -1,71 +1,61 @@
 package pl.krzysiekdyrkacz.githubdownloader.downloader;
 
-import org.apache.commons.io.FileUtils;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.event.EventListener;
+import jdk.jfr.Event;
+import org.springframework.http.HttpMethod;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
-import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
 
 
 @Service
 public class Download {
 
-    RestTemplate restTemplate = new RestTemplate();
-    List<Map> responses = restTemplate.getForObject(
-            "https://api.github.com/repos/{owner}/{repo}/contents", List.class, "KrzysiekDyrkacz",
-            "GithubDownloader");
+    private final URL url = new URL(String.format("https://api.github.com/repos/KrzysiekDyrkacz/GithubDownloader/contents?ref=main"));
 
+    WebClient client = WebClient.create();
+    WebClient.UriSpec<WebClient.RequestBodySpec> uriSpec = client.method(HttpMethod.GET);
+    WebClient.RequestBodySpec bodySpec = (WebClient.RequestBodySpec) uriSpec.uri( "https://api.github.com/repos/{owner}/{repo}/contents?ref={branch}",  "KrzysiekDyrkacz",
+            "GithubDownloader","main");
+    WebClient.RequestHeadersSpec<?> headersSpec = bodySpec.body(BodyInserters.fromValue("data"));
 
+    public Download() throws MalformedURLException {
+    }
 
 
     @Scheduled(fixedDelay = 5000)
     public void start() throws IOException {
 
+        Mono<Event> response = headersSpec.retrieve().bodyToMono(Event.class);
 
-
-
-        for (Map fileMetaData : responses) {
-            System.out.println(responses + "\\/n");
-
-            if(fileMetaData.get("type").equals("file")){
-                String fileName = (String) fileMetaData.get("name");
-                String downloadUrl = (String) fileMetaData.get("download_url");
-
-                if (downloadUrl != null) {
-
-                    File file = new File("source/" + fileName);
-                    try {
-                        FileUtils.copyURLToFile(new URL(downloadUrl), file);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
-                }
-
-
-            }else if (fileMetaData.get("type").equals("dir")){
-                String dirName = (String) fileMetaData.get("name");
-                if(!Files.exists(Path.of("source/" + dirName))){
-                    Files.createDirectory(Path.of("source/" + dirName));
-                }
-
-            }
-
+        try(
+                InputStream inputStream = url.openStream();
+                ReadableByteChannel readableByteChannel = Channels.newChannel(inputStream);
+                FileOutputStream f = new FileOutputStream("sourced")) {
+            f.getChannel().transferFrom(readableByteChannel,0,Long.MAX_VALUE);
+            Files.createFile(Path.of("successFlag"));
+        } catch (Exception e){
+            e.printStackTrace();
         }
 
-        if(!Files.exists(Path.of("source/successFlag.txt"))){
-            Files.createFile(Path.of("source/successFlag.txt"));
-        }
+
+
+
+
+
+
+
 
     }
 
